@@ -28,6 +28,23 @@ teams = pd.DataFrame([
     {"code": "VIT", "city": "Salvador, Brasil"},
 ])
 
+capacidade_estadio = 20000
+em_casa = capacidade_estadio*0.6
+fora_casa = capacidade_estadio*0.4
+relevancia_time_1 = 0.9
+relevancia_time_2 = 0.6
+
+# 0-terça, 1-quinta, 2-sabado, 3-domingo
+dia_semana=[0.6, 0.6, 1, 1.1]
+bilheteria = 2
+preco_ingresso_base = 52,26
+
+Bilheteria_jogo_time = []
+Bilheteria_jogo_time.append(((em_casa * relevancia_time_1) + (fora_casa*relevancia_time_2)))
+
+renda_jogo= Bilheteria_jogo_time[0] * (preco_ingresso_base*dia_semana)
+print(Bilheteria_jogo_time[0])
+
 # Etapa 2: geolocalização com fallback
 geoloc = Nominatim(user_agent="roundrobin_sched")
 

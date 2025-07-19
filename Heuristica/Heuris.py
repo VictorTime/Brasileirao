@@ -28,22 +28,71 @@ teams = pd.DataFrame([
     {"code": "VIT", "city": "Salvador, Brasil"},
 ])
 
-capacidade_estadio = 20000
-em_casa = capacidade_estadio*0.6
-fora_casa = capacidade_estadio*0.4
-relevancia_time_1 = 0.9
-relevancia_time_2 = 0.6
 
-# 0-terça, 1-quinta, 2-sabado, 3-domingo
+class TimeF():
+
+    def __init__(self, relevancia, nome,estado):
+        self.relavancia = relevancia
+        self.nome = nome
+        self.estado = estado
+
+class Estadio():
+
+    def __init__(self, capacidade, estado, dias_semana:list ):
+        self.capacidade = capacidade
+        self.estado = estado
+        self.dias_semana = dias_semana
+
+        self.em_casa = 0.6
+        self.fora_casa = 0.4
+    
+    def bilheteria(self, time1: TimeF, time2: TimeF, dia:int=1, valor_ingresso_base: float = 52.26):
+
+
+        if time1.estado == time2.estado: 
+            capacidade_time1 = self.capacidade * 0.5
+            capacidade_time2 = self.capacidade * 0.5
+        else:
+            if time1.estado == self.estado:
+                capacidade_time1 = self.capacidade * self.em_casa
+                capacidade_time2 = self.capacidade * self.fora_casa
+            else:
+                capacidade_time2 = self.capacidade * self.em_casa
+                capacidade_time1 = self.capacidade * self.fora_casa
+
+        bilheteria_time1 = capacidade_time1 * time1.relavancia
+        bilheteria_time2 = capacidade_time2 * time2.relavancia
+
+        bilheteria_total = (bilheteria_time1 + bilheteria_time2) * valor_ingresso_base * self.dias_semana[dia]
+
+        return bilheteria_total
+
+
+time1 = TimeF(0.9, "FLA", "Rio de janeiro")
+time2 = TimeF(0.4, "SPL", "São Paulo")
+
 dia_semana=[0.6, 0.6, 1, 1.1]
-bilheteria = 2
-preco_ingresso_base = 52,26
+estadio = Estadio(20000, "Sao Paulo",dia_semana )
 
-Bilheteria_jogo_time = []
-Bilheteria_jogo_time.append(((em_casa * relevancia_time_1) + (fora_casa*relevancia_time_2)))
+print("bilheteria:", estadio.bilheteria(time1,time2, 1) )
 
-renda_jogo= Bilheteria_jogo_time[0] * (preco_ingresso_base*dia_semana)
-print(Bilheteria_jogo_time[0])
+
+# capacidade_estadio = 20000
+# em_casa = capacidade_estadio*0.6
+# fora_casa = capacidade_estadio*0.4
+# relevancia_time_1 = 0.9
+# relevancia_time_2 = 0.6
+
+# # 0-terça, 1-quinta, 2-sabado, 3-domingo
+# dia_semana=[0.6, 0.6, 1, 1.1]
+# bilheteria = 2
+# preco_ingresso_base = 52,26
+
+# Bilheteria_jogo_time = []
+# Bilheteria_jogo_time.append(((em_casa * relevancia_time_1) + (fora_casa*relevancia_time_2)))
+
+# renda_jogo= Bilheteria_jogo_time[0] * (preco_ingresso_base*dia_semana)
+# print(Bilheteria_jogo_time[0])
 
 # Etapa 2: geolocalização com fallback
 geoloc = Nominatim(user_agent="roundrobin_sched")

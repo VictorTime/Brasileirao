@@ -5,6 +5,7 @@ from geopy.distance import geodesic
 import time
 import matplotlib.pyplot as plt
 import networkx as nx
+from multiprocessing import Pool
 
 # Etapa 1: dados dos times
 teams = pd.DataFrame([
@@ -242,9 +243,6 @@ def ajusta_homeaway(schedule, max_away=3):
 
 schedule = ajusta_homeaway(schedule)
 
-round_profit = [lucro_schedule([rnd]) for rnd in schedule]  # lucro por rodada
-current_profit = sum(round_profit)
-
 def swap_and_eval_cached(schedule, round_profit, iters=200):
     best = schedule
     best_profit = sum(round_profit)
@@ -267,6 +265,7 @@ def swap_and_eval_cached(schedule, round_profit, iters=200):
             best_round_profit[i], best_round_profit[j] = new_ri, new_rj
 
     return best, best_profit, best_round_profit
+
 # ——— Heurísticas de otimização ———————————————————
 
 def heuristic_greedy_swap(schedule, iters=200):
@@ -328,9 +327,63 @@ def heuristic_restrict_shuffle(schedule, window=4, iters=100):
             best, best_profit = new, p
     return best, best_profit
 
-# ——— Pipeline de otimização —————————————————————
+def small_random_move(cur):
+    new = [r[:] for r in cur]
+    op = np.random.choice(['swap', 'flip', 'shuffle'])
+    if op == 'swap':
+        i, j = np.random.choice(len(new), 2, replace=False)
+        new[i], new[j] = new[j], new[i]
+    elif op == 'flip':
+        rnd = np.random.randint(len(new))
+        pos = np.random.randint(len(new[rnd]))
+        a,b = new[rnd][pos]; new[rnd][pos] = (b,a)
+    else:
+        w = 3
+        start = np.random.randint(0, len(new)-w)
+        sub = new[start:start+w]; np.random.shuffle(sub)
+        new[start:start+w] = sub
+    return new
 
-# Pipeline de otimização
+# —– Lucro delta incremental —–❐
+def lucro_delta(cur, new, round_profit, idxs):
+    i, j = idxs
+    new_ri = lucro_schedule([new[i]])
+    new_rj = lucro_schedule([new[j]])
+    delta = new_ri + new_rj - round_profit[i] - round_profit[j]
+    return delta, new_ri, new_rj
+
+# —– Atualização do round_profit —–❐
+def update_round_profit(round_profit, new_vals, idxs):
+    i, j = idxs
+    new_ri, new_rj = new_vals
+    round_profit[i], round_profit[j] = new_ri, new_rj
+
+# —– Simulated Annealing —–❐
+
+def simulate_annealing_full(schedule, round_profit, T0=1000, alpha=0.995, iters=5000):
+    cur, rp = schedule, round_profit
+    cur_profit = sum(rp)
+    best, best_profit = cur, cur_profit
+    T = T0
+    T_min = 1e-6
+
+    for _ in range(iters):
+        new = small_random_move(cur)
+        # detectar modificaçōes:
+        # para simplicidade, recalcula todos lucros de rodada
+        new_round_profit = [lucro_schedule([rnd]) for rnd in new]
+        delta = sum(new_round_profit) - cur_profit
+
+        if delta > 0 or np.random.rand() < np.exp(delta / T):
+            cur, rp, cur_profit = new, new_round_profit, cur_profit + delta
+            if cur_profit > best_profit:
+                best, best_profit = cur, cur_profit
+        T = max(T_min, T * alpha)
+
+    return best, best_profit, rp
+
+round_profit = [lucro_schedule([rnd]) for rnd in schedule]  # lucro por rodada
+current_profit = sum(round_profit)
 
 history = []
 current = schedule
@@ -338,37 +391,65 @@ current_profit = lucro_schedule(current)
 history.append(("Inicial", current_profit))
 
 # Swap simples O(n²)
-current, p1 = heuristic_greedy_swap(current, 200)
+current, p1 = heuristic_greedy_swap(current, iters=1000)
+round_profit = [lucro_schedule([rnd]) for rnd in current]
 history.append(("Swap", p1))
 
 # Swap com cache O(n)
-current, p2, round_profit = swap_and_eval_cached(current, round_profit, 200)
+current, p2, round_profit = swap_and_eval_cached(current, round_profit, iters=1000)
 history.append(("Swap_Cache", p2))
 
 # Flip simples O(n²)
-current, p3 = heuristic_flip_homeaway(current, 200)
+current, p3 = heuristic_flip_homeaway(current, iters=1000)
+round_profit = [lucro_schedule([rnd]) for rnd in current]
 history.append(("Flip", p3))
 
 # Flip com cache O(1)
-current, p4, round_profit = flip_and_eval_cached(current, round_profit, 200)
+current, p4, round_profit = flip_and_eval_cached(current, round_profit, iters=1000)
 history.append(("Flip_Cache", p4))
 
 # Shuffle (use lucro calculado diretamente)
-current, p5 = heuristic_restrict_shuffle(current, window=4, iters=100)
+current, p5 = heuristic_restrict_shuffle(current, window=4, iters=1000)
 history.append(("Shuffle", p5))
 
-# ——— Plot de evolução do lucro ————————————————————
+# SA
+round_profit = [lucro_schedule([rnd]) for rnd in current]
+current, p6, final_rp = simulate_annealing_full(schedule, round_profit)
+history.append(("sa", p6))
+
+
+# --- Histórico e Visualização Final ---
+history = [
+    ("Inicial", current_profit),
+    ("Swap", p1),
+    ("Swap_Cache", p2),
+    ("Flip", p3),
+    ("Flip_Cache", p4),
+    ("Shuffle", p5),
+    ("SimulatedAnnealing", p6),
+]
 
 steps, profits = zip(*history)
-plt.figure(figsize=(8,5))
-plt.plot(steps, profits, marker='o', linestyle='-', color='blue')
-plt.title('Evolução do Lucro Durante Otimização')
+
+plt.figure(figsize=(10,6))
+plt.plot(steps, profits, marker='o', linestyle='-', color='purple')
+plt.title('Evolução do Lucro Estimado por Etapa')
 plt.xlabel('Etapa')
 plt.ylabel('Lucro Estimado (R$)')
 plt.grid(True)
-for i, (x,y) in enumerate(zip(steps, profits)):
-    plt.annotate(f"R$ {y:,.0f}", (i,y), textcoords="offset points",
-                 xytext=(0,8), ha='center',
-                 arrowprops=dict(arrowstyle='->', color='gray'))  # exemplo de anotação 
+for i, (step_name, profit) in enumerate(history):
+    plt.annotate(f"R$ {profit:,.0f}", (i, profit),
+                 textcoords="offset points", xytext=(0,8),
+                 ha='center', arrowprops=dict(arrowstyle='->', color='gray'))
 plt.tight_layout()
 plt.show()
+
+# --- Logs Claros dos Resultados ---
+print("🔍 Resultados por etapa:")
+print(f"Inicial            : R$ {history[0][1]:,.2f}")
+print(f"Swap (sem cache)   : R$ {history[1][1]:,.2f}")
+print(f"Swap com Cache     : R$ {history[2][1]:,.2f}")
+print(f"Flip (sem cache)   : R$ {history[3][1]:,.2f}")
+print(f"Flip com Cache     : R$ {history[4][1]:,.2f}")
+print(f"Shuffle final      : R$ {history[5][1]:,.2f}")
+print(f"Simulated Annealing: R$ {history[6][1]:,.2f}")

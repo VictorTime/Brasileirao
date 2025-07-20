@@ -242,6 +242,31 @@ def ajusta_homeaway(schedule, max_away=3):
 
 schedule = ajusta_homeaway(schedule)
 
+round_profit = [lucro_schedule([rnd]) for rnd in schedule]  # lucro por rodada
+current_profit = sum(round_profit)
+
+def swap_and_eval_cached(schedule, round_profit, iters=200):
+    best = schedule
+    best_profit = sum(round_profit)
+    best_round_profit = round_profit.copy()
+
+    for _ in range(iters):
+        i, j = np.random.choice(len(schedule), 2, replace=False)
+        new = [r[:] for r in best]
+        new[i], new[j] = new[j], new[i]
+
+        # Recalcula apenas os lucros das duas rodadas trocadas
+        new_ri = lucro_schedule([new[i]])
+        new_rj = lucro_schedule([new[j]])
+
+        candidate_profit = best_profit - best_round_profit[i] - best_round_profit[j] + new_ri + new_rj
+
+        if candidate_profit > best_profit:
+            best = new
+            best_profit = candidate_profit
+            best_round_profit[i], best_round_profit[j] = new_ri, new_rj
+
+    return best, best_profit, best_round_profit
 # ——— Heurísticas de otimização ———————————————————
 
 def heuristic_greedy_swap(schedule, iters=200):
@@ -268,6 +293,27 @@ def heuristic_flip_homeaway(schedule, iters=200):
             best, best_profit = new, p
     return best, best_profit
 
+def flip_and_eval_cached(schedule, round_profit, iters=200):
+    best = schedule
+    best_round_profit = round_profit.copy()
+    best_profit = sum(best_round_profit)
+    for _ in range(iters):
+        rnd_idx = np.random.randint(len(schedule))
+        pos = np.random.randint(len(schedule[rnd_idx]))
+        new_sched = [r[:] for r in best]
+        a, b = new_sched[rnd_idx][pos]
+        new_sched[rnd_idx][pos] = (b, a)
+
+        new_r = lucro_schedule([new_sched[rnd_idx]])
+        cand = best_profit - best_round_profit[rnd_idx] + new_r
+
+        if cand > best_profit:
+            best = new_sched
+            best_profit = cand
+            best_round_profit[rnd_idx] = new_r
+
+    return best, best_profit, best_round_profit
+
 def heuristic_restrict_shuffle(schedule, window=4, iters=100):
     best, best_profit = schedule, lucro_schedule(schedule)
     L = len(best)
@@ -284,16 +330,32 @@ def heuristic_restrict_shuffle(schedule, window=4, iters=100):
 
 # ——— Pipeline de otimização —————————————————————
 
-history = []
-current, cp = schedule, lucro_schedule(schedule)
-history.append(('Inicial', cp))
+# Pipeline de otimização
 
+history = []
+current = schedule
+current_profit = lucro_schedule(current)
+history.append(("Inicial", current_profit))
+
+# Swap simples O(n²)
 current, p1 = heuristic_greedy_swap(current, 200)
-history.append(('Swap', p1))
-current, p2 = heuristic_flip_homeaway(current, 200)
-history.append(('Flip', p2))
-current, p3 = heuristic_restrict_shuffle(current, 4, 100)
-history.append(('Shuffle', p3))
+history.append(("Swap", p1))
+
+# Swap com cache O(n)
+current, p2, round_profit = swap_and_eval_cached(current, round_profit, 200)
+history.append(("Swap_Cache", p2))
+
+# Flip simples O(n²)
+current, p3 = heuristic_flip_homeaway(current, 200)
+history.append(("Flip", p3))
+
+# Flip com cache O(1)
+current, p4, round_profit = flip_and_eval_cached(current, round_profit, 200)
+history.append(("Flip_Cache", p4))
+
+# Shuffle (use lucro calculado diretamente)
+current, p5 = heuristic_restrict_shuffle(current, window=4, iters=100)
+history.append(("Shuffle", p5))
 
 # ——— Plot de evolução do lucro ————————————————————
 

@@ -30,6 +30,70 @@ teams = pd.DataFrame([
     {"code": "VIT", "city": "Salvador, Brasil"},
 ])
 
+capacity_map = {
+    "PAL": 43713, "FLA": 78838, "FLU": 78838, "BOT": 78838, "VAS": 78838,
+    "CRU": 66658, "CAM": 66658,
+    "FOR": 63903, "BAH": 47907, "VIT": 47907,
+    "COR": 47605, "INT": 50128, "GRE": 55225,
+    "BRA": 17128, "CUI": 44000,
+    "ATL": 14450, "CAM": 66658, "CAP": 42372, 
+    "SAO": 72039, "CRI": 20000, "JUV": 20000
+}
+
+quali_estadio = {
+    "FLA": 0.8,  # Maracanã – histórica, alta capacidade
+    "FLU": 0.8,
+    "BOT": 0.7,  # Estádio Nilton Santos – moderno
+    "VAS": 0.7,
+    "PAL": 0.9,  # Allianz Parque – moderno e premiado
+    "COR": 0.9,  # Arena Corinthians – moderna, premiada
+    "CRU": 0.85, # Mineirão – considerado o melhor da América do Sul
+    "CAM": 0.85,
+    "GRE": 0.9,  # Arena do Grêmio – única UEFA Category IV no Brasil 
+    "INT": 0.8,  # Beira-Rio – moderno
+    "FOR": 0.8,  # Castelão – moderno
+    "BAH": 0.7,  # Fonte Nova – moderno
+    "VIT": 0.7,
+    "BRA": 0.6,  # Bragança – pequeno
+    "CUI": 0.6,  # Arena Pantanal
+    "CAP": 0.7,  # Estádio da Baixada – moderno
+    "ATL": 0.6,
+    "CRI": 0.5,
+    "JUV": 0.5,
+    "SAO": 0.85, # Morumbi – grande e tradicional
+}
+
+#Baseado na % de visto em https://www.cnnbrasil.com.br/esportes/futebol/pesquisa-revela-maiores-torcidas-do-brasil-veja-ranking/
+# Quem eu n achei, vai ter 0,01
+relev_map = {
+    "FLA": 0.248, "COR": 0.194, "PAL": 0.081, "SAO": 0.077,
+    "VAS": 0.048, "GRE": 0.044, "CAM": 0.040, "CRI": 0.031,
+    "INT": 0.029, "CRU": 0.027, "BAH": 0.025, "FLU": 0.024,
+    "BOT": 0.021, "VIT": 0.019
+}
+
+
+derbies = {
+    ("FLA","FLU"),  # Fla-Flu — Rio, maior da América 
+    ("FLA","VAS"),  # Clássico dos Milhões — Fla x Vasco
+    ("GRE","INT"),  # Grenal 
+    ("COR","PAL"),  # Derby Paulista — SP
+}
+
+# o valor do classico tava aumentando muito, ai tem os meninos ai pra controlar a influencia deles
+alpha, beta = 0.1, 0.05
+
+def compute_relev(code, qual_factor, oponente):
+    """
+    Verfica a relevância de um jogo baseado na: 
+    relevância do time : tamanho da torcida
+    derbies: Se for Classico/Rival, 1, se não 0
+    quali_estadio: qualidade do estadio * 0,05 (pra não supervalorizar)
+    """
+    base = relev_map.get(code, 0.01)
+    rival = 1 if any((code,o) in derbies or (o,code) in derbies for o in oponente) else 0
+    return min(1, base + alpha * rival + beta * qual_factor)
+
 class TimeF():
 
     def __init__(self, relevancia, nome, cidade):
@@ -48,6 +112,7 @@ class Estadio():
         self.fora_casa = 0.4
     
     def bilheteria(self, time1: TimeF, time2: TimeF, dia:int=0, valor_ingresso_base: float = 52.26):
+
         if time1.cidade == time2.cidade:
             capacidade_time1 = capacidade_time2 = self.capacidade / 2
         else:
@@ -58,7 +123,6 @@ class Estadio():
                 capacidade_time2 = self.capacidade * self.em_casa
                 capacidade_time1 = self.capacidade * self.fora_casa
 
-
         bilheteria_time1 = capacidade_time1 * time1.relavancia
         bilheteria_time2 = capacidade_time2 * time2.relavancia
 
@@ -66,17 +130,30 @@ class Estadio():
 
         return bilheteria_total
 
-#atribuindo aleatoriamente um peso 
-rel_dict = {c: np.random.uniform(0.4, 0.9) for c in teams.code}
+#Preencher para todos
+rel_dict = {t["code"]: relev_map.get(t["code"], 0.001) for _, t in teams.iterrows()}
 
-print(rel_dict["CAP"])
 #criando os times usando o que tem la dataframe
-teams_objs = [TimeF(nome=row.code, relevancia=rel_dict[row.code], cidade=row.city) for idx,row in teams.iterrows()]
+teams_objs = [
+    TimeF(
+        relevancia=rel_dict[row.code],   # float
+        nome=row.code,                   # string
+        cidade=row.city                  # string
+    )
+    for _, row in teams.iterrows()
+]
 
-dia_semanas=[0.6, 0.6, 1, 1.1]
+dias_semanas=[0.6, 0.6, 1, 1.1]
 
 # a gente, em tese, tem que fazer o capacidade do estadio variar
-estadio = {t.nome: Estadio(20000, t.cidade, dias_semana=dia_semanas) for t in teams_objs}
+estadio = {
+    t.nome: Estadio(
+        capacity_map.get(t.nome, 20000),  # se não existir no map, usa 20000
+        t.cidade,
+        dias_semanas
+    )
+    for t in teams_objs
+}
 
 
 # Etapa 2: geolocalização com fallback
@@ -119,7 +196,7 @@ schedule = base_rounds + mirrored  # 38 rodadas
 def lucro_schedule(schedule):
     total = 0
     for r_idx, rodada in enumerate(schedule):
-        dia = r_idx % len(dia_semanas)
+        dia = r_idx % len(dias_semanas)
         for hid, aid in rodada:
             t_casa = teams_objs[hid]
             t_fora = teams_objs[aid]

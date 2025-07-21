@@ -3,7 +3,8 @@ import numpy as np
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import time
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt, seaborn as sns
+
 import networkx as nx
 from multiprocessing import Pool
 import random
@@ -422,6 +423,93 @@ round_profit = [lucro_schedule([rnd]) for rnd in current]
 current, p6, final_rp = simulate_annealing_full(schedule, round_profit)
 history.append(("sa", p6))
 
+def calcular_lucros_confrontos(schedule, teams_objs):
+    dados = []
+    for r_idx, rodada in enumerate(schedule):
+        for hid, aid in rodada:
+            if None in (hid, aid): continue
+            t_casa = teams_objs[hid]
+            t_fora = teams_objs[aid]
+            est = estadio[t_casa.nome]
+            rev = est.bilheteria(t_casa, t_fora, r_idx % len(dias_semanas))
+            cost = cost_mat[hid, aid]
+            lucro = rev - cost
+            dados.append({
+                "rodada": r_idx + 1,
+                "mandante": t_casa.nome,
+                "visitante": t_fora.nome,
+                "lucro": lucro
+            })
+    return pd.DataFrame(dados)
+
+# --- 1. Lucros por confronto e rodada ---
+df = calcular_lucros_confrontos(current, teams_objs)
+df['lucro'] = df['lucro'].astype(float)
+
+melhores_confrontos = df.nlargest(10, 'lucro')
+piores_confrontos = df.nsmallest(10, 'lucro')
+
+lucros_por_rodada = df.groupby('rodada')['lucro'].sum().reset_index()
+melhores_rodadas = lucros_por_rodada.nlargest(5, 'lucro')
+piores_rodadas    = lucros_por_rodada.nsmallest(5, 'lucro')
+
+calendario_final = df[['rodada','mandante','visitante']].drop_duplicates().sort_values('rodada')
+
+sns.set(style='whitegrid', palette='muted')
+
+# a) Lucro por rodada
+plt.figure(figsize=(12,4))
+sns.barplot(x='rodada', y='lucro', data=lucros_por_rodada)
+plt.title('Lucro por Rodada')
+plt.xlabel('Rodada')
+plt.ylabel('Receita Líquida (R$)')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# b) Top 5 melhores e piores rodadas
+plt.figure(figsize=(10,4))
+sns.barplot(x='rodada', y='lucro', data=melhores_rodadas, color='green')
+plt.title('Top 5 Rodadas Mais Lucrativas')
+plt.show()
+
+plt.figure(figsize=(10,4))
+sns.barplot(x='rodada', y='lucro', data=piores_rodadas, color='red')
+plt.title('Top 5 Rodadas Menos Lucrativas')
+plt.show()
+
+# c) Top Confrontos
+plt.figure(figsize=(10,6))
+sns.barplot(x='lucro', y='mandante', hue='visitante',
+            data=melhores_confrontos.sort_values('lucro', ascending=True))
+plt.title('Top 10 Confrontos Mais Lucrativos')
+plt.xlabel('Lucro (R$)')
+plt.ylabel('Mandante / Visitante')
+plt.legend(title='Visitante')
+plt.tight_layout()
+plt.show()
+
+# calcular receita acumulada por time em casa e fora
+df_home = df.groupby('mandante')['lucro'].sum().reset_index().rename(columns={'mandante':'time','lucro':'home_lucro'})
+df_away = df.groupby('visitante')['lucro'].sum().reset_index().rename(columns={'visitante':'time','lucro':'away_lucro'})
+df_time = pd.merge(df_home, df_away, on='time', how='outer').fillna(0)
+df_time['total_lucro'] = df_time['home_lucro'] + df_time['away_lucro']
+
+# d) gráfico receita por time
+plt.figure(figsize=(12,6))
+sns.barplot(x='total_lucro', y='time', data=df_time.sort_values('total_lucro', ascending=False))
+plt.title('Receita Total por Time')
+plt.xlabel('Lucro Total (R$)')
+plt.ylabel('Time')
+plt.tight_layout()
+plt.show()
+
+print("\nMelhores Confrontos\n", melhores_confrontos[['mandante','visitante','lucro']])
+print("\nPiores Confrontos\n", piores_confrontos[['mandante','visitante','lucro']])
+print("\nMelhores Rodadas\n", melhores_rodadas)
+print("\nPiores Rodadas\n", piores_rodadas)
+print("\nReceita por Time\n", df_time.sort_values('total_lucro', ascending=False).head(10))
+print("\nCalendário (primeiras 20 partidas)\n", calendario_final.head(20))
 
 # --- Histórico e Visualização Final ---
 history = [

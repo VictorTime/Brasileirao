@@ -6,6 +6,7 @@ import time
 import matplotlib.pyplot as plt
 import networkx as nx
 from multiprocessing import Pool
+import random
 
 # Etapa 1: dados dos times
 teams = pd.DataFrame([
@@ -79,6 +80,7 @@ derbies = {
     ("FLA","VAS"),  # Clássico dos Milhões — Fla x Vasco
     ("GRE","INT"),  # Grenal 
     ("COR","PAL"),  # Derby Paulista — SP
+    ("FLA","COR"),  # Classico das Nações
 }
 
 # o valor do classico tava aumentando muito, ai tem os meninos ai pra controlar a influencia deles
@@ -166,7 +168,7 @@ for t in teams_objs:
     coords[t.nome] = (loc.latitude, loc.longitude) if loc else (0,0)
 
 
-# Etapa 4: custo por km e matriz de custos
+# Etapa 4: custo por km e matriz de custos (ANAC)
 C_PER_KM = 0.30
 
 n = len(teams_objs)
@@ -179,11 +181,12 @@ for i,t1 in enumerate(teams_objs):
 
 # Etapa 5: algoritmo Round-Robin espelhado
 def round_robin_pairing(team_ids):
-    ids = list(team_ids)
+    ids = list(random.sample(team_ids,len(team_ids)))
     if len(ids) % 2 == 1: ids.append(None)
     n = len(ids)
     rounds = []
     for r in range(n-1):
+        ids = list(random.sample(ids,len(ids)))
         l1 = ids[:n//2]
         l2 = ids[n//2:][::-1]
         rounds.append(list(zip(l1, l2)))
@@ -273,6 +276,7 @@ def heuristic_greedy_swap(schedule, iters=200):
     for _ in range(iters):
         new = [r[:] for r in best]
         i, j = np.random.choice(len(new), 2, replace=False)
+        # Troca times 
         new[i], new[j] = new[j], new[i]
         p = lucro_schedule(new)
         if p > best_profit:
@@ -382,7 +386,8 @@ def simulate_annealing_full(schedule, round_profit, T0=1000, alpha=0.995, iters=
 
     return best, best_profit, rp
 
-round_profit = [lucro_schedule([rnd]) for rnd in schedule]  # lucro por rodada
+base_schedule = schedule
+round_profit = [lucro_schedule([rnd]) for rnd in base_schedule]  # lucro por rodada
 current_profit = sum(round_profit)
 
 history = []

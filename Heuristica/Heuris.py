@@ -187,7 +187,6 @@ def round_robin_pairing(team_ids):
     n = len(ids)
     rounds = []
     for r in range(n-1):
-        ids = list(random.sample(ids,len(ids)))
         l1 = ids[:n//2]
         l2 = ids[n//2:][::-1]
         rounds.append(list(zip(l1, l2)))
@@ -247,6 +246,8 @@ def ajusta_homeaway(schedule, max_away=3):
 
 schedule = ajusta_homeaway(schedule)
 
+# ——— Heurísticas de otimização ———————————————————
+
 def swap_and_eval_cached(schedule, round_profit, iters=200):
     best = schedule
     best_profit = sum(round_profit)
@@ -269,8 +270,6 @@ def swap_and_eval_cached(schedule, round_profit, iters=200):
             best_round_profit[i], best_round_profit[j] = new_ri, new_rj
 
     return best, best_profit, best_round_profit
-
-# ——— Heurísticas de otimização ———————————————————
 
 def heuristic_greedy_swap(schedule, iters=200):
     best, best_profit = schedule, lucro_schedule(schedule)

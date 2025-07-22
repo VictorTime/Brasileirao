@@ -364,7 +364,7 @@ def update_round_profit(round_profit, new_vals, idxs):
 
 # —– Simulated Annealing —–❐
 
-def simulate_annealing_full(schedule, round_profit, T0=1000, alpha=0.995, iters=5000):
+def simulate_annealing_full(schedule, round_profit, T0=40000, alpha=0.999, iters=5000):
     cur, rp = schedule, round_profit
     cur_profit = sum(rp)
     best, best_profit = cur, cur_profit
@@ -378,7 +378,7 @@ def simulate_annealing_full(schedule, round_profit, T0=1000, alpha=0.995, iters=
         new_round_profit = [lucro_schedule([rnd]) for rnd in new]
         delta = sum(new_round_profit) - cur_profit
 
-        if delta > 0 or np.random.rand() < np.exp(delta / T):
+        if delta < 0 or np.random.rand() < np.exp(delta / T):
             cur, rp, cur_profit = new, new_round_profit, cur_profit + delta
             if cur_profit > best_profit:
                 best, best_profit = cur, cur_profit
@@ -413,14 +413,14 @@ history.append(("Flip", p3))
 current, p4, round_profit = flip_and_eval_cached(current, round_profit, iters=1000)
 history.append(("Flip_Cache", p4))
 
-# Shuffle (use lucro calculado diretamente)
-current, p5 = heuristic_restrict_shuffle(current, window=4, iters=1000)
-history.append(("Shuffle", p5))
-
 # SA
 round_profit = [lucro_schedule([rnd]) for rnd in current]
-current, p6, final_rp = simulate_annealing_full(schedule, round_profit)
+current, p6, final_rp = simulate_annealing_full(current, round_profit)
 history.append(("sa", p6))
+
+# Shuffle (use lucro calculado diretamente)
+current, p5 = heuristic_restrict_shuffle(current, window=6, iters=1000)
+history.append(("Shuffle", p5))
 
 def calcular_lucros_confrontos(schedule, teams_objs):
     dados = []
@@ -517,8 +517,8 @@ history = [
     ("Swap_Cache", p2),
     ("Flip", p3),
     ("Flip_Cache", p4),
-    ("Shuffle", p5),
     ("SimulatedAnnealing", p6),
+    ("Shuffle", p5),
 ]
 
 steps, profits = zip(*history)
@@ -543,5 +543,5 @@ print(f"Swap (sem cache)   : R$ {history[1][1]:,.2f}")
 print(f"Swap com Cache     : R$ {history[2][1]:,.2f}")
 print(f"Flip (sem cache)   : R$ {history[3][1]:,.2f}")
 print(f"Flip com Cache     : R$ {history[4][1]:,.2f}")
-print(f"Shuffle final      : R$ {history[5][1]:,.2f}")
 print(f"Simulated Annealing: R$ {history[6][1]:,.2f}")
+print(f"Shuffle final      : R$ {history[5][1]:,.2f}")

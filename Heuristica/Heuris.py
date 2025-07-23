@@ -118,23 +118,25 @@ class Estadio():
         self.fora_casa = 0.4
     
     def bilheteria(self, time1: TimeF, time2: TimeF, dia:int=0, valor_ingresso_base: float = 52.26):
-
+        t1 = 0
         if time1.cidade == time2.cidade:
             capacidade_time1 = capacidade_time2 = self.capacidade / 2
         else:
             if time1.cidade == self.cidade:
+                t1=1
                 capacidade_time1 = self.capacidade * self.em_casa
                 capacidade_time2 = self.capacidade * self.fora_casa
             else:
                 capacidade_time2 = self.capacidade * self.em_casa
                 capacidade_time1 = self.capacidade * self.fora_casa
 
-        quali1 = quali_estadio.get(time1.nome, 0)
-        quali2 = quali_estadio.get(time2.nome, 0)
-
+        if(t1==1):
+            quali1 = quali_estadio.get(time1.nome, 0)
+        else:
+            quali1 = quali_estadio.get(time2.nome, 0)
         # 3) chama compute_relev para cada perspectiva
         rel1 = compute_relev(time1.nome, quali1, time2.nome)
-        rel2 = compute_relev(time2.nome, quali2, time1.nome)
+        rel2 = compute_relev(time2.nome, quali1, time1.nome)
 
         # 4) bilheterias ponderadas
         bilheteria1 = capacidade_time1 * rel1
